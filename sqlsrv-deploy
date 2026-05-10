@@ -35,7 +35,7 @@ sqlsrv_whitelist_appsvc_ips() {
     --output tsv | tr ',' ' ')
 
   for ip in $ips; do
-    rule_name="AllowAppService_${ip}" | tr '.' '-'
+    rule_name=$(echo "AllowAppService_${ip}" | tr '.' '-')
     rule_exists=$(az sql server firewall-rule list \
       --resource-group "$resource_group" \
       --server "$db_srv" \

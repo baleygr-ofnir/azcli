@@ -68,6 +68,7 @@ keyvault_assign_appsvc_permissions() {
 }
 
 keyvault_set_connstring_secret() {
+  db_connstring="Server=tcp:${db_srv}.database.windows.net,1433;Initial Catalog=${db_name};User ID=${repo_owner};Password=${db_password};Trusted_Connection=False;Encrypt=True"
   secret_name="${db_name}-connstring"
   db_connstring_secret=$(az keyvault secret show \
     --name "$secret_name" \

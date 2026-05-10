@@ -146,7 +146,8 @@ webapp_deploy() {
     --repo "$repo_path"
 
   gh secret set AZURE_SUBSCRIPTION_ID \
-    --body "$sub_id"
+    --body "$sub_id" \
+    --repo "$repo_path"
 
   mkdir -p .github/workflows
   cat<<EOF > .github/workflows/az-workflow.yml
