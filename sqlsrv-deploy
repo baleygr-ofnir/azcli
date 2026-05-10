@@ -1,0 +1,36 @@
+#!/bin/bash
+
+sqlsrv_create() {
+  az sql server create \
+    --location swedencentral \
+    --resource-group $resource_group \
+    --name ${db_name}-srv \
+    --admin-user $repo_owner \
+    --admin-password Password123!
+}
+
+sqldb_create() {
+  az sql db create \
+    --resource-group $resource_group \
+    --server ${db_name}-srv \
+    --name ${db_name} \
+    --service-objective basic \
+    --zone-redundant false 
+}
+
+whitelist_appsvc_ips() {
+  ips=$(az webapp show \
+    --resource-group "$resource_group" \
+    --name $app_name
+    --query possibleOutboundIpAddresses \
+    --output tsv | tr ',' ' ')
+
+  for ip in $ips; do
+    az sql server firewall-rule create \
+      --resource-group $resource_group \
+      --server ${db_name}-srv \
+      --name "AllowAppService_${ip}" \
+      --start-ip-address $ip \
+      --end-ip-address $ip
+    done
+}

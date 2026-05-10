@@ -1,0 +1,46 @@
+#!/bin/bash
+working_dir=${PWD}
+script_dir=$(dirname "$(realpath ${BASH_SOURCE[0]})")
+wan_ip=$(curl ip.me)
+
+source ${script_dir}/webapp-deploy
+source ${script_dir}/sqlsrv-deploy
+source ${script_dir}/mkghrepo
+
+resource_group=${1}
+runtime=${2}
+price_tier=${3}
+repo_owner=$(gh api user -q .login)
+project_name="${repo_owner}-$(basename $PWD)"
+plan_name="${project_name}-appsvc-plan"
+app_name="${project_name}-webapp"
+#app_ip=$(az webapp config hostname get-external-ip \
+#  --resource-group $resource_group \
+#  --webapp-name $app_name \
+#  --query ip \
+#  --output tsv)
+app_id=""
+app_object_id=""
+sub_id=""
+tenant_id=""
+db_name="${project_name}-db"
+db_password="Password123!"
+repo_path="${repo_owner}/${project_name}"
+
+# Webapp orchestration
+
+app_plan_create()
+
+webapp_create()
+
+webapp_auth_gh()
+
+# SQL Server orchestration
+sqlsrv_create()
+
+sqldb_create()
+
+whitelist_appsvc_ips()
+
+# Set connection string in appsvc 
+
