@@ -1,36 +1,77 @@
 #!/bin/bash
-
 sqlsrv_create() {
-  az sql server create \
-    --location swedencentral \
-    --resource-group $resource_group \
-    --name ${db_name}-srv \
-    --admin-user $repo_owner \
-    --admin-password Password123!
+  sqlsrv_exists=$(az sql server show \
+    --resource-group "$resource_group" \
+    --name "$db_srv" \
+    --query id \
+    --output tsv 2>/dev/null)
+
+  if [ -z "$sqlsrv_exists" ]; then
+    read -sp "Enter SQL Server admin password: " db_password
+
+    if [ -z "$db_password" ]; then
+      echo "SQL Server admin password is empty, exiting..."
+      exit 1
+    fi
+
+    az sql server create \
+      --location swedencentral \
+      --resource-group "$resource_group" \
+      --name "$db_srv" \
+      --admin-user "$repo_owner" \
+      --admin-password "$db_password"
+
+    echo -e "\n\tSQL Server ${db_srv} was created"
+  else
+    echo "SQL Server ${db_srv} already exists, skipping creation..."
+  fi
 }
 
-sqldb_create() {
-  az sql db create \
-    --resource-group $resource_group \
-    --server ${db_name}-srv \
-    --name ${db_name} \
-    --service-objective basic \
-    --zone-redundant false 
-}
-
-whitelist_appsvc_ips() {
+sqlsrv_whitelist_appsvc_ips() {
   ips=$(az webapp show \
     --resource-group "$resource_group" \
-    --name $app_name
+    --name "$app_name" \
     --query possibleOutboundIpAddresses \
     --output tsv | tr ',' ' ')
 
   for ip in $ips; do
-    az sql server firewall-rule create \
-      --resource-group $resource_group \
-      --server ${db_name}-srv \
-      --name "AllowAppService_${ip}" \
-      --start-ip-address $ip \
-      --end-ip-address $ip
-    done
+    rule_name="AllowAppService_${ip}" | tr '.' '-'
+    rule_exists=$(az sql server firewall-rule list \
+      --resource-group "$resource_group" \
+      --server "$db_srv" \
+      --query "[?name=='$rule_name'].name" \
+      --output tsv 2>/dev/null)
+
+    if [ -z "$rule_exists" ]; then
+      az sql server firewall-rule create \
+        --resource-group "$resource_group" \
+        --server "$db_srv" \
+        --name "$rule_name" \
+        --start-ip-address "$ip" \
+        --end-ip-address "$ip"
+      else
+        echo -e "\tRule '${rule_name}' already exists, skipping creation"
+    fi
+  done
+}
+
+sqldb_create() {
+  sqldb_exists=$(az sql db list \
+    --resource-group "$resource_group" \
+    --server "$db_srv" \
+    --query "[?name=='$db_name'].name" \
+    --output tsv 2>/dev/null)
+
+  if [ -z "$sqldb_exists" ]; then
+    az sql db create \
+      --resource-group "$resource_group" \
+      --server "$db_srv" \
+      --name "$db_name" \
+      --service-objective basic \
+      --zone-redundant false
+
+    echo -e "\n\t SQL Database ${db_name} was created"
+  else
+    echo "SQL Database already exists, skipping creation..."
+  fi
 }

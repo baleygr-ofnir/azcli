@@ -1,42 +1,111 @@
 #!/bin/bash
 
 app_plan_create() {
-  az appservice plan create \
-    --resource-group $resource_group \
-    --name $plan_name \
-    --sku $price_tier
+  app_svc_plan_exists=$(az appservice plan show \
+    --resource-group "$resource_group" \
+    --name "$plan_name" \
+    --query id \
+    --output tsv 2>/dev/null)
+
+  if [ -z "$app_svc_plan_exists" ]; then
+    az appservice plan create \
+      --resource-group "$resource_group" \
+      --name "$plan_name" \
+      --sku "$price_tier" \
+      --is-linux
+
+    echo -e "\n\tApp Service Plan ${plan_name} was successfully created"
+  else
+    echo "App Service Plan already exists, skipping creation..."
+  fi
 }
 
+# Authorise GitHub repository in Azure with OIDC
 webapp_create() {
-  az webapp create \
-    --resource-group $resource_group \
-    --plan-name $plan_name \
-    --name $app_name \
-    --runtime $runtime
+  app_principal_id=$(az webapp show \
+    --resource-group "$resource_group" \
+    --name "$app_name" \
+    --query identity.principalId \
+    --output tsv 2>/dev/null)
+
+  if [ -z "$app_principal_id" ]; then
+    app_principal_id=$(az webapp create \
+      --resource-group "$resource_group" \
+      --plan "$plan_name" \
+      --name "$app_name" \
+      --runtime "$runtime" \
+      --assign-identity "[system]" \
+      --query identity.principalId \
+      --output tsv)
+
+    if [ -n "$app_principal_id" ]; then
+      echo -e "\n\tWeb App ${app_name} was successfully created"
+    else
+      echo -e "\n\tWeb App creation unsuccessful, exiting..."
+      exit 1
+    fi
+  else
+    echo "Web App already exists, skipping creation..."
+  fi
 }
 
 webapp_auth_gh() {
-  app_id=$(az ad app create \
-    --display-name $app_name \
-    --query appId \
-    --output tsv)
+  app_id=$(az ad app list \
+    --display-name "$app_name" \
+    --query "[0].appId" \
+    --output tsv 2>/dev/null)
 
-  app_object_id=$(az ad sp create \
-    --id $app_id \
-    --query id \
-    --output tsv)
+  if [ -z "$app_id" ]; then
+    echo "Creating new application registration..."
+    app_id=$(az ad app create \
+      --display-name "$app_name" \
+      --query appId \
+      --output tsv)
+  fi
+
+  app_object_id=$(az ad sp list \
+    --filter "appId eq '$app_id'" \
+    --query "[0].id" \
+    --output tsv 2>/dev/null)
+
+  if [ -z "$app_object_id" ]; then
+    app_object_id=$(az ad sp create \
+      --id "$app_id" \
+      --query id \
+      --output tsv)
+  fi
 
   sub_id=$(az account show \
     --query id \
     --output tsv)
 
-  az role assignment create \
-    --role "Website Contributor" \
-    --subscription $sub_id
-    --assignee-object-id $app_object_id
-    --assignee-principal-type ServicePrincipal \
-    --scope /subscriptions/$sub_id/resourceGroups/$resource_group/providers/Microsoft.Web/sites/$app_name
+  scope="/subscriptions/$sub_id/resourceGroups/$resource_group/providers/Microsoft.Web/sites/$app_name"
 
+  assignment_exists=$(az role assignment list \
+    --assignee "$app_object_id" \
+    --role "Website Contributor" \
+    --scope "$scope" \
+    --query "[0].id" \
+    --output tsv 2>/dev/null)
+
+  if [ -z "$assignment_exists" ]; then
+    echo "Creating role assignment..."
+    az role assignment create \
+      --role "Website Contributor" \
+      --subscription "$sub_id" \
+      --assignee-object-id "$app_object_id" \
+      --assignee-principal-type ServicePrincipal \
+      --scope "$scope"
+  else
+    echo "Role assignment exists, skipping creation"
+  fi
+
+  if az ad app federated-credential show \
+    --id "$app_id" \
+    --federated-credential-id "github-actions-credential" >/dev/null 2>&1; then
+    echo "Federated credential already exists, skipping creation"
+  else
+    echo "Creating federated credential..."
     cat<<EOF > credential.json
     {
       "name": "github-actions-credential",
@@ -49,82 +118,116 @@ webapp_auth_gh() {
     }
 EOF
 
-  az ad app federated-credential create \
-    --id $app_id
-    --parameters credential.json
+    az ad app federated-credential create \
+      --id "$app_id" \
+      --parameters credential.json
+
+    rm credential.json
+  fi
 }
 
 webapp_deploy() {
-
-  // Only if not called from a pre-existing git repository
-  if ! $(git rev-parse --is-inside-work-tree 2>/dev/null);then
-    // Initialize git repo then creates and pushes it to GitHub with their CLI
-    mkghrepo
-  fi
+  # Initialises git repo if not in one as well as creates at and
+  # pushes to GitHub
+  ${script_dir}/mkghrepo
 
   webapp_auth_gh
+
   tenant_id=$(az account show \
     --query tenantId \
     --output tsv)
 
   gh secret set AZURE_CLIENT_ID \
     --body "$app_id" \
-    --repo ${repo_path}
+    --repo "$repo_path"
 
   gh secret set AZURE_TENANT_ID \
     --body "$tenant_id" \
-    --repo ${repo_path}
+    --repo "$repo_path"
 
   gh secret set AZURE_SUBSCRIPTION_ID \
     --body "$sub_id"
 
   mkdir -p .github/workflows
   cat<<EOF > .github/workflows/az-workflow.yml
-  name: Build and Deploy .NET 10 App via OIDC
+name: Build and Deploy .NET 10 App via OIDC
 
-  on:
-    push:
-      branches:
-        - main
-    workflow_dispatch:
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
-  permissions:
-    id-token: write
-    contents: read
+permissions:
+  id-token: write
+  contents: read
 
-  jobs:
-    build-and-deploy:
-      runs-on: ubuntu-latest
-      steps:
-        - name: Checkout
-          uses: actions/checkout@v4
+env:
+  AZURE_WEBAPP_NAME: $app_name
+  DOTNET_VERSION: '10.0.x'
 
-        - name: Azure Login via OIDC
-          uses: azure/login@v2
-          with:
-            client-id: \${{ secrets.AZURE_CLIENT_ID }}
-            tenant-id: \${{ secrets.AZURE_TENANT_ID }}
-            subscription: \${{ secrets.AZURE_SUBSCRIPTION_ID }}
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-        - name: Setup .NET 10
-          uses: actions/setup-dotnet@v4
-          with:
-            dotnet-version: '10.0.x'
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: \${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: \${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: \${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-        - name: Build with .NET CLI
-          working-directory: ./${project_name}-api
-          run: dotnet build --configuration Release
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: \${{ env.DOTNET_VERSION }}
 
-        - name: Publish with .NET CLI
-          working-directory: ./${project_name}-api
-          run: dotnet publish -c Release -o ../../publish
+      - name: Restore .NET dependencies
+        run: dotnet restore
 
-        - name: Deploy to Azure Web App
-          uses: azure/webapps-deploy@v3
-          with:
-            app-name: '${project_name}'
-            package: ./publish
+      - name: Build with .NET CLI
+        working-directory: ./${project_name}
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Publish with .NET CLI
+        working-directory: ./${project_name}
+        run: dotnet publish --no-restore --no-build -c Release --output './publish'
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: '${app_name}'
+          package: './${project_name}/publish'
+
+      - name: Logout from Azure
+        run: |
+          az logout
 EOF
 
+  git add .github
+  git commit -m "Added Azure webapp deploy workflow"
+  git push origin main
 }
 
+webapp_set_connstring() {
+  setting_name="ConnectionStrings__DefaultConnection"
+  setting_exists=$(az webapp config appsettings list \
+    --resource-group "$resource_group" \
+    --name "$app_name" \
+    --query "[?name=='$setting_name'].name" \
+    --output tsv 2>/dev/null)
+
+  if [ -z "$setting_exists" ]; then
+    az webapp config appsettings set \
+      --resource-group "$resource_group" \
+      --name "$app_name" \
+      --settings ConnectionStrings__DefaultConnection="@Microsoft.KeyVault(${db_connstring_secret})"
+    
+    echo -e "\t\nWeb App Setting with Connection String Key Vault Secret was created"
+  else
+    echo -e "\t\nWeb App Setting with Connection String Key Vault secret already exists, skipping creation"
+  fi
+}

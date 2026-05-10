@@ -1,0 +1,90 @@
+#!/bin/bash
+
+keyvault_create() {
+  keyvault_id=$(az keyvault show \
+    --resource-group "$resource_group" \
+    --name "$keyvault_name" \
+    --query id \
+    --output tsv 2>/dev/null)
+
+  if [ -z "$keyvault_id" ]; then
+    keyvault_id=$(az keyvault create \
+      --location swedencentral \
+      --name "$keyvault_name" \
+      --resource-group "$resource_group" \
+      --enable-rbac-authorization true \
+      --query id \
+      --output tsv)
+  else
+    echo "Key Vault already exists, skipping creation"
+  fi
+}
+
+keyvault_assign_admin_permissions() {
+  role="Key Vault Secrets Officer"
+  user_oid=$(az ad signed-in-user show \
+    --query id \
+    --output tsv 2>/dev/null)
+
+  assignment_exists=$(az role assignment list \
+    --assignee "$user_oid" \
+    --role "$role" \
+    --scope "$keyvault_id" \
+    --query "[0].id" \
+    --output tsv 2>/dev/null)
+
+  if [ -z "$assignment_exists" ]; then
+    az role assignment create \
+      --role "$role" \
+      --assignee-object-id "$user_oid" \
+      --assignee-principal-type User \
+      --scope "$keyvault_id"
+
+    echo "Waiting 45 seconds for Azure RBAC to propagate..."
+    sleep 45
+  else
+    echo "Current user has already been assigned $role, skipping assignment creation"
+  fi
+}
+
+keyvault_assign_appsvc_permissions() {
+  role="Key Vault Secrets User"
+  assignment_exists=$(az role assignment list \
+    --assignee "$app_principal_id" \
+    --role "$role" \
+    --scope "$keyvault_id" \
+    --query "[0].id" \
+    --output tsv 2>/dev/null)
+
+  if [ -z "$assignment_exists" ]; then
+    az role assignment create \
+      --role "$role" \
+      --assignee-object-id "$app_principal_id" \
+      --assignee-principal-type ServicePrincipal \
+      --scope "$keyvault_id"
+  else
+    echo "Key Vault Role Assignment already exists, skipping creation"
+  fi
+}
+
+keyvault_set_connstring_secret() {
+  secret_name="${db_name}-connstring"
+  db_connstring_secret=$(az keyvault secret show \
+    --name "$secret_name" \
+    --vault-name "$keyvault_name" \
+    --query id \
+    --output tsv 2>/dev/null)
+
+  if [ -z "$db_connstring_secret" ]; then
+      db_connstring_secret=$(az keyvault secret set \
+      --name "${db_name}-connstring" \
+      --vault-name "$keyvault_name" \
+      --value "$db_connstring" \
+      --description "Database Connection String for ${db_name}" \
+      --disabled false \
+      --query id \
+      --output tsv)
+    else
+      echo "Key Vault Secret already exists, skipping creation"
+  fi
+}

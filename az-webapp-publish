@@ -1,46 +1,71 @@
 #!/bin/bash
 working_dir=${PWD}
-script_dir=$(dirname "$(realpath ${BASH_SOURCE[0]})")
+script_dir=$(dirname "$(realpath ${0})")
 wan_ip=$(curl ip.me)
 
 source ${script_dir}/webapp-deploy
 source ${script_dir}/sqlsrv-deploy
-source ${script_dir}/mkghrepo
+source ${script_dir}/keyvault-deploy
 
 resource_group=${1}
 runtime=${2}
 price_tier=${3}
+
 repo_owner=$(gh api user -q .login)
-project_name="${repo_owner}-$(basename $PWD)"
-plan_name="${project_name}-appsvc-plan"
-app_name="${project_name}-webapp"
-#app_ip=$(az webapp config hostname get-external-ip \
-#  --resource-group $resource_group \
-#  --webapp-name $app_name \
-#  --query ip \
-#  --output tsv)
+project_name="$(basename ${working_dir})"
+plan_name="${project_name}-asp"
+app_name="${project_name}-app"
 app_id=""
 app_object_id=""
+app_principal_id=""
 sub_id=""
 tenant_id=""
 db_name="${project_name}-db"
-db_password="Password123!"
+db_srv="${db_name}-srv"
+db_connstring="Server=tcp:${db_srv}.database.windows.net,1433;Initial Catalog=${db_name};User ID=${repo_owner};Password=${db_password};Trusted_Connection=False;Encrypt=True"
+db_connstring_secret=""
+keyvault_name="${project_name}-${RANDOM}-kv"
+keyvault_id=""
+keyvault_uri=""
 repo_path="${repo_owner}/${project_name}"
 
 # Webapp orchestration
+echo -e "\n>>> Creating App Service Plan..."
+app_plan_create
 
-app_plan_create()
-
-webapp_create()
-
-webapp_auth_gh()
+echo -e "\n>>> Creating Web App..."
+webapp_create
 
 # SQL Server orchestration
-sqlsrv_create()
+echo -e "\n>>> Creating SQL Server..."
+sqlsrv_create
 
-sqldb_create()
+echo -e "\n>>> Creating SQL Server Database..."
+sqldb_create
 
-whitelist_appsvc_ips()
+echo -e "\n>>> Whitelisting Possible Web App IP Addresses in SQL Server Firewall..."
+sqlsrv_whitelist_appsvc_ips
 
-# Set connection string in appsvc 
+## Keyvault orchestration
+echo -e "\n>>> Creating Keyvault..."
+keyvault_create
 
+if [ -z $keyvault_id ]; then
+  echo "ERROR: Key Vault ID is empty. The vault failed to create (possibly naming conflict)."
+  exit 1
+fi
+
+echo -e "\n>>> Assigning admin permissions to Key Vault for current user..."
+keyvault_assign_admin_permissions
+
+echo -e "\n>>> Assigning permissions to Key Vault for Web App..."
+keyvault_assign_appsvc_permissions
+
+echo -e "\n>>> Creating SQL Database Connection String secret..."
+keyvault_set_connstring_secret
+
+echo -e "\n>>> Configuring environment variable with Secret URI in Web App..."
+webapp_set_connstring
+
+echo -e "\n>>> Configuring GitHub Actions CI/CD for Web App..."
+webapp_deploy
