@@ -210,6 +210,8 @@ EOF
 
   git add .github
   git commit -m "Added Azure webapp deploy workflow"
+  # Timeout to let Website Contributor propagate
+  sleep 60
   git push origin main
 }
 
