@@ -1,5 +1,5 @@
 # **azcli** -
-## Automated App Service with SQL database and Key Vault deployment
+## Automated deployment of Azure App Service with SQL database and Key Vault deployment including GitHub Actions CI/CD base
 
 ## **az-webapp-publish** <resource-group-name> <linux-runtime-string> <price-tier> -
 ### Orchestrator for all the script functions:
@@ -43,3 +43,5 @@ Uses name of working directory for project name as it is currently designed to b
 SQL Database user is grabbed from GitHub CLI signed-in username
 
 All functions are configured idempotently such that it will not attempt creating any resource that already exists, in case there as issues in some part and it has to be run again.
+
+TODO: App Insights+Log Analytics Workspace
