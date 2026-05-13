@@ -40,6 +40,7 @@ wan_ip=$(curl ip.me)
 source ${script_dir}/webapp-deploy
 source ${script_dir}/sqlsrv-deploy
 source ${script_dir}/keyvault-deploy
+source ${script_dir}/monitoring-deploy
 
 repo_owner=$(gh api user -q .login)
 project_name="$(basename ${working_dir})"
@@ -96,6 +97,9 @@ keyvault_set_connstring_secret
 
 echo -e "\n>>> Configuring environment variable with Secret URI in Web App..."
 webapp_set_connstring
+
+echo -e "\n>>> Configuring Web App monitoring before deployment..."
+monitoring_create
 
 echo -e "\n>>> Configuring GitHub Actions CI/CD for Web App..."
 webapp_deploy

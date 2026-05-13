@@ -1,0 +1,52 @@
+#!/bin/bash
+
+monitoring_create() {
+  workspace_name="${project_name}-law"
+  ai_name="${project_name}-ai"
+  
+  workspace_id=$(az monitor log-analytics workspace show \
+    --resource-group "$resource_group" \
+    --workspace-name "$workspace_name" \
+    --query id \
+    --output tsv 2>/dev/null || true)
+
+  if [ -z "$workspace_id" ]; then
+    echo "Creating Log Analytics Workspace..."
+    workspace_id=$(az monitor log-analytics workspace create \
+      --resource-group "$resource_group" \
+      --workspace-name "$workspace_name" \
+      --query id \
+      --output tsv)
+  else
+    echo "Log Analytics Workspace already exists, skipping creation..."
+  fi
+
+  ai_connection_string=$(az monitor app-insights component show \
+    --app "$ai_name" \
+    --query connectionString \
+    --output tsv 2>/dev/null || true)
+
+  if [ -z "$ai_connection_string" ]; then
+    echo "Creating Application Insights..."
+    ai_connection_string=$(az monitor app-insights component create \
+      --resource-group "$resource_group" \
+      --app "$ai_name" \
+      --location swedencentral \
+      --workspace "$workspace_id" \
+      --kind web \
+      --application-type web \
+      --query connectionString \
+      --output tsv)
+  else
+    echo "Application Insights already exists, skipping creation..."
+  fi
+
+  echo "Enabling Application Insights on Web App..."
+  az webapp config appsettings set \
+    --resource-group "$resource_group" \
+    --name "$app_name" \
+    --settings \
+      APPLICATIONINSIGHTS_CONNECTION_STRING="$ai_connection_string" \
+      ApplicationInsightsAgent_EXTENSION_VERSION="~3" \
+      XDT_MicrosoftApplicationInsights_Mode="Recommended"
+}
