@@ -109,9 +109,10 @@ webapp_configure_monitoring
 echo -e "\n>>> Configuring Storage and Daily Backups..."
 storage_create
 storage_create_container
-webapp_configure_storage_logs
+storage_mount_file_share
 webapp_configure_storage_mount
 webapp_configure_backup
+webapp_configure_storage_logs
 
 echo -e "\n>>> Configuring GitHub Actions CI/CD for Web App..."
 webapp_deploy
