@@ -329,6 +329,62 @@ webapp_configure_backup() {
   echo -e "\tDaily backups configured on ${app_name}"
 }
 
+webapp_configure_storage_logs() {
+  echo -e "\nChecking Web App logging configuration..."
+
+  log_status=$(az webapp log show \
+    --resource-group "$resource_group" \
+    --name "$app_name" \
+    --query "httpLogs.azureBlobStorage.sasUrl" \
+    --output tsv 2>/dev/null || true)
+
+  if [ -z "$log_status" ];then
+    echo -e "\tConfiguring App Service to send logs to Storage Account..."
+    az webapp log config \
+      --resource-group "$resource_group" \
+      --name "$app_name" \
+      --application-logging true \
+      --level information \
+      --web-server-logging storage \
+      --storage-endpoint "https://${storage_name}.blob.core.windows.net/${container_name}" \
+      --sas-url "$backup_url" >/dev/null
+  else
+    echo -e "\tWeb server storage logging configuration already exists, skipping..."
+  fi
+}
+
+webapp_configure_storage_mount() {
+  mount_id="StaticFiles"
+
+  echo -e "\tChecking Web App storage mount configuration..."
+  mount_exists=$(az webapp config storage-share list \
+    --resource-group "$resource_group" \
+    --name "$app_name" \
+    --query "[?customId=='$mount_id].customId" \
+    --output tsv 2>/dev/null || true)
+
+  if [ -z "$mount_exists" ];then
+    local_storage_key=$(az storage account keys list \
+      --resource-group "$resource_group" \
+      --account-name "$storage_name" \
+      --query "[0].value" \
+      --output tsv)
+
+    echo -e "\tMounting File Share to Web App at /site/wwwroot/static..."
+    az webapp config storage-share add \
+      --resource-group "$resource_group" \
+      --name "$app_name" \
+      --custom-id "$mount_id" \
+      --storage-type AzureFiles \
+      --account-name "$storage_name" \
+      --share-name "$share_name" \
+      --access-key "$local_storage_key" \
+      --mount-path "/site/wwwroot/static" >/dev/null
+  else
+    echo -e "\tStorage mount '${mount_id}' already exists, skipping configuration..."
+  fi
+}
+
 webapp_configure_autoscale() {
   autoscale_name="${plan_name}-autoscale"
 

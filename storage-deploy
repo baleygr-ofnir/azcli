@@ -46,3 +46,25 @@ storage_create_container() {
     echo -e "\tStorage Container already exists, skipping creation..."
   fi
 }
+
+storage_mount_file_share() {
+  share_name="${app_name}-static-content"
+
+  echo -e "\nChecking for Azure File Share..."
+  share_exists=$(az storage share show \
+    --account-name "$storage_name" \
+    --account-key "$storage_key" \
+    --name "$share_name" \
+    --query name \
+    --output tsv 2>/dev/null || true)
+
+  if [ -z "$share_exists"];then
+    echo -e "\tCreating File Share ($share_name)..."
+    az storage share create \
+      --account-name "$storage_name" \
+      --account-key "$storage_key" \
+      --name "$share_name" >/dev/null
+  else
+    echo -e "\tFile Share already exists, skipping creation..."
+  fi
+}
