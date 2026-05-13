@@ -35,6 +35,7 @@ webapp_create() {
       --name "$app_name" \
       --runtime "$runtime" \
       --assign-identity "[system]" \
+      --https-only \
       --query identity.principalId \
       --output tsv)
 
@@ -182,17 +183,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Azure Login via OIDC
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: \${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: \${{ secrets.AZURE_TENANT_ID }}
           subscription-id: \${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: \${{ env.DOTNET_VERSION }}
 
@@ -244,5 +245,131 @@ webapp_set_connstring() {
     echo -e "\t\nWeb App Setting with Connection String Key Vault Secret was created"
   else
     echo -e "\t\nWeb App Setting with Connection String Key Vault secret already exists, skipping creation"
+  fi
+}
+
+webapp_set_ip_restrictions() {
+  formatted_ip=${wan_ip//./-}
+  rule_name="AllowDeveloperClientIP_${formatted_ip}"
+
+  echo -e "\n>>>Applying inbound IP restrictions to Web App..."
+
+  rule_exists=$(az webapp config access-restrictions show \
+    --resource-group "$resource_group" \
+    --name "$app_name" \
+    --query "ipSecurityRestrictions[?name=='$rule_name'].name"
+    --output tsv)
+
+  if [ -z "$rule_exists" ]; then
+    echo -e "\tAdding inbound IP restriction for developer client address ${wan_ip}"
+
+    az webapp config access-restrictions add \
+      --resource-group "$resource_group" \
+      --name "$app_name" \
+      --rule-name "$rule_name" \
+      --action Allow \
+      --ip-address "${wan_ip}/32"
+      --priority 100 \
+      --description "Only allow access from developer public IP" >/dev/null
+  else
+    echo -e "\tIP restriction rule '$rule_name' already exists, skipping..."
+  fi
+}
+
+webapp_configure_monitoring() {
+  ai_secret_uri=$(az keyvault secret show \
+    --vault "$keyvault_name" \
+    --name "$ai_secret_name" \
+    --query id \
+    --output tsv)
+
+  echo "Enabling Application Insights on Web App..."
+  az webapp config appsettings set \
+    --resource-group "$resource_group" \
+    --name "$app_name" \
+    --settings \
+    APPLICATIONINSIGHTS_CONNECTION_STRING="@Microsoft.KeyVault(SecretUri=${ai_secret_uri})" \
+      ApplicationInsightsAgent_EXTENSION_VERSION="~3" \
+      XDT_MicrosoftApplicationInsights_Mode="Recommended" >/dev/null
+
+  echo -e "\tApplication Insights configured on ${app_name}"
+}
+
+webapp_configure_backup() {
+  if [ "${price_tier^^}" = "F1" ] || [ "${price_tier^^}" == "FREE" ];then
+    echo -e "\nSkipping Daily Backups, not supported on Free (F1) price tier."
+    return 0
+  fi
+
+  echo -e "\tGenerating SAS Token for Web App Backup..."
+
+  expiry_date=$(date -u -d "+1 year" '+%Y-%m-%dT%H:%MZ')
+
+  sas_token=$(az storage container generate-sas \
+    --account-name "$storage_name" \
+    --account-key "$storage_key" \
+    --name "$container_name" \
+    --permissions rwdl \
+    --expiry "$expiry_date" \
+    --output tsv)
+
+  backup_url="https://${storage_name}.blob.core.windows.net/${container_name}?${sas_token}"
+
+  echo -e "\tConfiguring daily backups for Web App..."
+
+  az webapp config backup update \
+    --resource-group "$resource_group" \
+    --webapp-name "$app_name" \
+    --backup-name "${app_name}-daily-backup" \
+    --container-url "$backup_url" \
+    --frequency 1d \
+    --retain-one true \
+    --retention 30 >/dev/null
+
+  echo -e "\tDaily backups configured on ${app_name}"
+}
+
+webapp_configure_autoscale() {
+  autoscale_name="${plan_name}-autoscale"
+
+  echo "Checking Auto-scaling configuration for App Service Plan..."
+
+  plan_id=$(az appservice plan show \
+    --resource-group "$resource_group" \
+    --name "$plan_name" \
+    --query id \
+    --output tsv)
+
+  if ! az monitor autoscale show \
+    --resource-group "$resource_group" \
+    --name "$autoscale_name" >/dev/null 2>&1
+  then
+    echo -e "\tCreating Autoscale profile (Min: 1, Max: 3, Default: 1)..."
+    az monitor autoscale create \
+      --resource-group "$resource_group" \
+      --name "$autoscale_name" \
+      --resource "$plan_id" \
+      --min-count 1 \
+      --max-count 3 \
+      --count 1 >/dev/null
+
+
+    echo -e "\tAdding Scale-Out rule (CPU > 70% for 10m)..."
+    az monitor autoscale rule create \
+      --resource-group "$resource_group" \
+      --autoscale-name "$autoscale_name" \
+      --condition "CpuPercentage > 70 avg 10m" \
+      --scale out 1 >/dev/null
+
+    echo -e "\tAdding Scale-In rule (CPU < 30% for 10m)..."
+    az monitor autoscale rule create \
+      --resource-group "$resource_group" \
+      --autoscale-name "$autoscale_name" \
+      --condition "CpuPercentage < 30 avg 10m" \
+      --scale in 1 >/dev/null
+
+    echo -e "\tAuto-scaling rules configured successfully."
+  else
+    echo -e "\tAutoscale profile '${autoscale_name}' already exists, skipping creation..."
   fi
 }

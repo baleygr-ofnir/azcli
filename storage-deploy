@@ -1,0 +1,48 @@
+#!/bin/bash
+
+storage_create() {
+  storage_name=$(echo "${project_name}store" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9' | cut -c 1-24)
+
+  echo -e "\nChecking Storage Account..."
+  if ! az storage account show \
+    --resource-group "$resource_group" \
+    --name "$storage_name" >/dev/null 2>&1
+  then
+    echo -e "\tCreating Storage Account ($storage_name)..."
+    az storage account create \
+      --resource-group "$resource_group" \
+      --name "$storage_name" \
+      --location swedencentral \
+      --sku Standard_LRS \
+      --kind StorageV2 \
+      --min-tls-version TLS1_2 \
+      --allow-blob-public-access false \
+      --assign-identity >/dev/null
+  else
+    echo -e "\tStorage Account already exists, skipping creation..."
+  fi
+}
+
+storage_create_container() {
+  container_name="webapp-backups"
+  storage_key=$(az storage account keys list \
+    --resource-group "$resource_group" \
+    --account-name "$storage_name" \
+    --query "[0].value" \
+    --output tsv)
+
+  echo -e "\nChecking Storage Container..."
+  if ! az storage container show \
+    --account-name "$storage_name" \
+    --account-key "$storage_key" \
+    --name "$container_name" >/dev/null 2>&1
+  then
+    echo -e "\tCreating Storage Container ($container_name)..."
+    az storage container create \
+      --account-name "$storage_name" \
+      --account-key "$storage_key" \
+      --name "$container_name" >/dev/null
+  else
+    echo -e "\tStorage Container already exists, skipping creation..."
+  fi
+}

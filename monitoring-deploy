@@ -72,22 +72,3 @@ monitoring_store_secret() {
     echo -e "\tSecret already exists in Key Vault, skipping creation..."
   fi
 }
-
-monitoring_configure_webapp() {
-  ai_secret_uri=$(az keyvault secret show \
-    --vault "$keyvault_name" \
-    --name "$ai_secret_name" \
-    --query id \
-    --output tsv)
-
-  echo "Enabling Application Insights on Web App..."
-  az webapp config appsettings set \
-    --resource-group "$resource_group" \
-    --name "$app_name" \
-    --settings \
-    APPLICATIONINSIGHTS_CONNECTION_STRING="@Microsoft.KeyVault(SecretUri=${ai_secret_uri})" \
-      ApplicationInsightsAgent_EXTENSION_VERSION="~3" \
-      XDT_MicrosoftApplicationInsights_Mode="Recommended" >/dev/null
-
-  echo -e "\tApplication Insights configured on ${app_name}"
-}

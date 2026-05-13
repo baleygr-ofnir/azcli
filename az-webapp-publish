@@ -41,6 +41,7 @@ source ${script_dir}/webapp-deploy
 source ${script_dir}/sqlsrv-deploy
 source ${script_dir}/keyvault-deploy
 source ${script_dir}/monitoring-deploy
+source ${script_dir}/storage-deploy
 
 repo_owner=$(gh api user -q .login)
 project_name="$(basename ${working_dir})"
@@ -78,7 +79,7 @@ echo -e "\n>>> Whitelisting Possible Web App IP Addresses in SQL Server Firewall
 sqlsrv_whitelist_appsvc_ips
 
 ## Keyvault orchestration
-echo -e "\n>>> Creating Keyvault..."
+echo -e "\n>>> Creating Key Vault..."
 keyvault_create
 
 if [ -z $keyvault_id ]; then
@@ -102,7 +103,12 @@ echo -e "\n>>> Configuring Web App monitoring before deployment..."
 monitoring_create_law
 monitoring_create_appinsights
 monitoring_store_secret
-monitoring_configure_webapp
+webapp_configure_monitoring
+
+echo -e "\n>>> Configuring Storage and Daily Backups..."
+storage_create
+storage_create_container
+webapp_configure_backup
 
 echo -e "\n>>> Configuring GitHub Actions CI/CD for Web App..."
 webapp_deploy
