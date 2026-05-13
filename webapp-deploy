@@ -40,6 +40,11 @@ webapp_create() {
 
     if [ -n "$app_principal_id" ]; then
       echo -e "\n\tWeb App ${app_name} was successfully created"
+      # Set Development environment so that Scalar is reachable after deployment
+      az webapp config appsettings set \
+      --resource-group "$resource_group" \
+      --name "$app_name" \
+      --settings ASPNETCORE_ENVIRONMENT="Development"
     else
       echo -e "\n\tWeb App creation unsuccessful, exiting..."
       exit 1
@@ -47,12 +52,6 @@ webapp_create() {
   else
     echo "Web App already exists, skipping creation..."
   fi
-
-  # Set Development environment so that Scalar is reachable after deployment
-  az webapp config appsettings set \
-  --resource-group "$resource_group" \
-  --name "$app_name" \
-  --settings ASPNETCORE_ENVIRONMENT="Development"
 }
 
 webapp_auth_gh() {
@@ -133,9 +132,14 @@ EOF
 }
 
 webapp_deploy() {
+  if [ -f .github/workflows/az-workflow.yml ]; then
+    git rm .github/workflows/az-workflow.yml >/dev/null 2>&1 || true
+    git commit -m "Suspend workflow for infrastructure provisioning" >/dev/null || true
+  fi
+
   # Initialises git repo if not in one as well as creates at and
   # pushes to GitHub
-  ${script_dir}/mkghrepo
+  ${script_dir}/mkghrepo 
 
   webapp_auth_gh
 
@@ -215,8 +219,10 @@ jobs:
 EOF
 
   git add .github
-  git commit -m "Added Azure webapp deploy workflow"
+  git commit -m "Added Azure webapp deploy workflow" || true
+
   # Timeout to let Website Contributor propagate
+  echo -e "\nTimeout to let OIDC role assignment propagate"
   sleep 60
   git push origin main
 }

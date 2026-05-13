@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 dirname=$(basename $PWD)
 repo_name=${dirname}
 description=${4:-"$repo_name"}
@@ -29,7 +30,7 @@ if github_cli_installed; then
   printf "repo: |%s|\ndir:  |%s|\n" "$repo_name" "$dirname" | cat -A
   if [ ${repo_name} != ${dirname} ]; then
     repo_path="$PWD/${repo_name}"
-    mkdir "${repo_path}"
+    mkdir -p "${repo_path}"
     cd "${repo_path}"
   else
      repo_path="$PWD"
@@ -46,14 +47,26 @@ if github_cli_installed; then
   fi
   
   git add .
-  git commit -m "Initial commit"
+  git commit -m "Script commit" || true
 
-  gh repo create "${repo_name}" \
-    --public \
-    --description "${description}" \
-    --source=${repo_path} \
-    --remote=origin \
-    --push
+  github_username=$(gh api user --jq .login)
+
+  if [[ -z "${github_username}" ]]; then
+    echo "Error retrieving logged in username, make sure GitHub CLI is authenticated properly before continuing"
+    exit 1
+  fi
+
+  if ! gh repo view "${github_username}/${repo_name}" >/dev/null 2>&1; then
+    gh repo create "${repo_name}" \
+      --public \
+      --description "${description}" \
+      --source=${repo_path} \
+      --remote=origin \
+      --push
+  else
+    echo "GitHub repository ${github_username}/${repo_name} already exists, skipping creation"
+    git push origin main
+  fi
 
   echo "Local repo created at ${repo_path} and pushed to GitHub at https://github.com/$(gh api user --jq .login)/${repo_name}.git"
 else 

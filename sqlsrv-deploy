@@ -4,7 +4,7 @@ sqlsrv_create() {
     --resource-group "$resource_group" \
     --name "$db_srv" \
     --query id \
-    --output tsv 2>/dev/null)
+    --output tsv 2>/dev/null || true)
 
   if [ -z "$sqlsrv_exists" ]; then
     read -sp "Enter SQL Server admin password: " db_password
@@ -40,7 +40,7 @@ sqlsrv_whitelist_appsvc_ips() {
       --resource-group "$resource_group" \
       --server "$db_srv" \
       --query "[?name=='$rule_name'].name" \
-      --output tsv 2>/dev/null)
+      --output tsv 2>/dev/null || true)
 
     if [ -z "$rule_exists" ]; then
       az sql server firewall-rule create \
@@ -60,7 +60,7 @@ sqldb_create() {
     --resource-group "$resource_group" \
     --server "$db_srv" \
     --query "[?name=='$db_name'].name" \
-    --output tsv 2>/dev/null)
+    --output tsv 2>/dev/null || true)
 
   if [ -z "$sqldb_exists" ]; then
     az sql db create \
