@@ -67,6 +67,7 @@ app_plan_create
 
 echo -e "\n>>> Creating Web App..."
 webapp_create
+webapp_set_ip_restrictions
 
 # SQL Server orchestration
 echo -e "\n>>> Creating SQL Server..."
