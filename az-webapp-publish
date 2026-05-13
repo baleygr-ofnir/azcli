@@ -1,4 +1,38 @@
 #!/bin/bash
+set -euo pipefail
+
+resource_group=""
+runtime=""
+price_tier=""
+
+usage_example="Usage: $0 -g <resource_group> -r <runtime> -t <price_tier>"
+
+# Named parameter setup
+while getopts "g:r:t:" opt; do
+  case $opt in
+    g) resource_group="${OPTARG}" ;;
+    r) runtime="${OPTARG}" ;;
+    t) price_tier="${OPTARG}" ;;
+    \?)
+      echo "${usage_example}"
+      exit 1
+      ;;
+  esac
+done
+
+shift $((OPTIND - 1))
+
+# Verify all required parameters are present
+if [[ -z "$resource_group" || -z "$runtime" || -z "$price_tier" ]]; then
+  echo "Error: Required parameters are missing." >&2
+  echo "$usage_example"
+  exit 1
+fi
+
+echo -e "Will deploy resources using supplied values:\n\tResource group: ${resource_group}\n\tRuntime: ${runtime}\n\tPrice Tier: ${price_tier}"
+
+sleep 5
+
 working_dir=${PWD}
 script_dir=$(dirname "$(realpath ${0})")
 wan_ip=$(curl ip.me)
@@ -6,10 +40,6 @@ wan_ip=$(curl ip.me)
 source ${script_dir}/webapp-deploy
 source ${script_dir}/sqlsrv-deploy
 source ${script_dir}/keyvault-deploy
-
-resource_group=${1}
-runtime=${2}
-price_tier=${3}
 
 repo_owner=$(gh api user -q .login)
 project_name="$(basename ${working_dir})"

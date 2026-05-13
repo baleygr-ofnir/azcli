@@ -5,7 +5,7 @@ app_plan_create() {
     --resource-group "$resource_group" \
     --name "$plan_name" \
     --query id \
-    --output tsv 2>/dev/null)
+    --output tsv 2>/dev/null || true)
 
   if [ -z "$app_svc_plan_exists" ]; then
     az appservice plan create \
@@ -26,7 +26,7 @@ webapp_create() {
     --resource-group "$resource_group" \
     --name "$app_name" \
     --query identity.principalId \
-    --output tsv 2>/dev/null)
+    --output tsv 2>/dev/null || true)
 
   if [ -z "$app_principal_id" ]; then
     app_principal_id=$(az webapp create \
@@ -47,13 +47,19 @@ webapp_create() {
   else
     echo "Web App already exists, skipping creation..."
   fi
+
+  # Set Development environment so that Scalar is reachable after deployment
+  az webapp config appsettings set \
+  --resource-group "$resource_group" \
+  --name "$app_name" \
+  --settings ASPNETCORE_ENVIRONMENT="Development"
 }
 
 webapp_auth_gh() {
   app_id=$(az ad app list \
     --display-name "$app_name" \
     --query "[0].appId" \
-    --output tsv 2>/dev/null)
+    --output tsv 2>/dev/null || true)
 
   if [ -z "$app_id" ]; then
     echo "Creating new application registration..."
@@ -66,7 +72,7 @@ webapp_auth_gh() {
   app_object_id=$(az ad sp list \
     --filter "appId eq '$app_id'" \
     --query "[0].id" \
-    --output tsv 2>/dev/null)
+    --output tsv 2>/dev/null || true)
 
   if [ -z "$app_object_id" ]; then
     app_object_id=$(az ad sp create \
@@ -86,7 +92,7 @@ webapp_auth_gh() {
     --role "Website Contributor" \
     --scope "$scope" \
     --query "[0].id" \
-    --output tsv 2>/dev/null)
+    --output tsv 2>/dev/null || true)
 
   if [ -z "$assignment_exists" ]; then
     echo "Creating role assignment..."
@@ -221,7 +227,7 @@ webapp_set_connstring() {
     --resource-group "$resource_group" \
     --name "$app_name" \
     --query "[?name=='$setting_name'].name" \
-    --output tsv 2>/dev/null)
+    --output tsv 2>/dev/null || true)
 
   if [ -z "$setting_exists" ]; then
     az webapp config appsettings set \
