@@ -104,7 +104,7 @@ Implements zero-trust security via Managed Identity and RBAC.
 * **`keyvault_set_connstring_secret`**: Securely stores the database connection string as a secret in the vault.
 
 ### 4. `storage-deploy` (Asset & Log Storage)
-Manages the resources for backups, logs, and static files.
+Manages the resources daily system backups and static application files.
 
 * **`storage_create`**: Provisions a StorageV2 account with TLS 1.2 and disabled public blob access.
 
