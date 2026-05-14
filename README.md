@@ -41,8 +41,6 @@ Manages the application environment, platform configurations, and CI/CD setup.
 
 * **`webapp_configure_backup`**: Schedules **daily snapshots** to a storage container, with logic to skip unsupported tiers like F1/Free.
 
-* **`webapp_configure_storage_logs`**: Configures the App Service to dump HTTP and application logs directly to a persistent Azure Storage container.
-
 * **`webapp_configure_storage_mount`**: Mounts an Azure File Share to `/site/wwwroot/static` to fulfill the requirement for handling static assets.
 
 ### 2. `sqlsrv-deploy` (Data Layer)
