@@ -7,7 +7,7 @@ keyvault_create() {
     --output tsv 2>/dev/null || true)
 
   if [ -n "$existing_keyvault_name" ]; then
-    echo "Key vault already exists (${existing_keyvault_name}), skipping creation..."
+    echo -e "\tKey vault already exists (${existing_keyvault_name}), skipping creation..."
 
     keyvault_name="$existing_keyvault_name"
 
@@ -24,7 +24,7 @@ keyvault_create() {
       --enable-rbac-authorization true \
       --query id \
       --output tsv)
-    echo "Key Vault ${keyvault_name} was created."
+    echo -e "\tKey Vault ${keyvault_name} was created."
   fi
 }
 
@@ -48,10 +48,10 @@ keyvault_assign_admin_permissions() {
       --assignee-principal-type User \
       --scope "$keyvault_id"
 
-    echo "Waiting 45 seconds for Azure RBAC to propagate..."
+    echo -e "\tWaiting 45 seconds for Azure RBAC to propagate..."
     sleep 45
   else
-    echo "Current user has already been assigned $role, skipping assignment creation"
+    echo -e "\tCurrent user has already been assigned $role, skipping assignment creation"
   fi
 }
 
@@ -71,7 +71,7 @@ keyvault_assign_appsvc_permissions() {
       --assignee-principal-type ServicePrincipal \
       --scope "$keyvault_id"
   else
-    echo "Key Vault Role Assignment already exists, skipping creation"
+    echo -e "\tKey Vault Role Assignment already exists, skipping creation"
   fi
 }
 
@@ -95,6 +95,6 @@ keyvault_set_connstring_secret() {
       --query id \
       --output tsv)
     else
-      echo "Key Vault Secret already exists, skipping creation"
+      echo -e "\tKey Vault Secret already exists, skipping creation"
   fi
 }

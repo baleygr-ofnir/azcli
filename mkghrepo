@@ -52,7 +52,7 @@ if github_cli_installed; then
   github_username=$(gh api user --jq .login)
 
   if [[ -z "${github_username}" ]]; then
-    echo "Error retrieving logged in username, make sure GitHub CLI is authenticated properly before continuing"
+    echo -e "\tError retrieving logged in username, make sure GitHub CLI is authenticated properly before continuing"
     exit 1
   fi
 
@@ -64,12 +64,12 @@ if github_cli_installed; then
       --remote=origin \
       --push
   else
-    echo "GitHub repository ${github_username}/${repo_name} already exists, skipping creation"
+    echo -e "\tGitHub repository ${github_username}/${repo_name} already exists, skipping creation"
     git push origin main
   fi
 
-  echo "Local repo created at ${repo_path} and pushed to GitHub at https://github.com/$(gh api user --jq .login)/${repo_name}.git"
+  echo -e "\tLocal repo created at ${repo_path} and pushed to GitHub at https://github.com/$(gh api user --jq .login)/${repo_name}.git"
 else 
-  echo "Please install github-cli before use"
+  echo -e "\tPlease install github-cli before use"
   exit 1
 fi

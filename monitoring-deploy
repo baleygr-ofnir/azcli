@@ -5,7 +5,7 @@ az config set extension.use_dynamic_install=yes_without_prompt >/dev/null 2>&1
 monitoring_create_law() {
   workspace_name="${project_name}-law"
 
-  echo -e "\nChecking Log Analytics Workspace..."
+  echo -e "\n\tChecking Log Analytics Workspace..."
 
   if ! az monitor log-analytics workspace show \
     --resource-group "$resource_group" \
@@ -31,12 +31,12 @@ monitoring_create_law() {
 monitoring_create_appinsights() {
   ai_name="${project_name}-ai"
 
-  echo -e "\nChecking Application Insights..."
+  echo -e "\n\tChecking Application Insights..."
   if ! az monitor app-insights component show \
     --resource-group "$resource_group" \
     --app "$ai_name" >/dev/null 2>&1
   then
-    echo "Creating Application Insights..."
+    echo -e "\tCreating Application Insights..."
     az monitor app-insights component create \
       --resource-group "$resource_group" \
       --app "$ai_name" \
@@ -45,7 +45,7 @@ monitoring_create_appinsights() {
       --kind web \
       --application-type web >/dev/null 
   else
-    echo "Application Insights already exists, skipping creation..."
+    echo -e "\tApplication Insights already exists, skipping creation..."
   fi
 }
 
@@ -57,7 +57,7 @@ monitoring_store_secret() {
     --query connectionString \
     --output tsv)
 
-  echo -e "\nChecking if Application Insights connection string is in Key Vault..."
+  echo -e "\n\tChecking if Application Insights connection string is in Key Vault..."
   if ! az keyvault secret show \
     --vault-name "$keyvault_name" \
     --name "$ai_secret_name" >/dev/null 2>&1

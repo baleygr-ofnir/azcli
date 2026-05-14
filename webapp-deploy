@@ -16,7 +16,7 @@ app_plan_create() {
 
     echo -e "\n\tApp Service Plan ${plan_name} was successfully created"
   else
-    echo "App Service Plan already exists, skipping creation..."
+    echo -e "\n\tApp Service Plan already exists, skipping creation..."
   fi
 }
 
@@ -40,18 +40,18 @@ webapp_create() {
       --output tsv)
 
     if [ -n "$app_principal_id" ]; then
-      echo -e "\n\tWeb App ${app_name} was successfully created"
+      echo -e "\tWeb App ${app_name} was successfully created"
       # Set Development environment so that Scalar is reachable after deployment
       az webapp config appsettings set \
       --resource-group "$resource_group" \
       --name "$app_name" \
       --settings ASPNETCORE_ENVIRONMENT="Development"
     else
-      echo -e "\n\tWeb App creation unsuccessful, exiting..."
+      echo -e "\tWeb App creation unsuccessful, exiting..."
       exit 1
     fi
   else
-    echo "Web App already exists, skipping creation..."
+    echo -e "\tWeb App already exists, skipping creation..."
   fi
 }
 
@@ -62,7 +62,7 @@ webapp_auth_gh() {
     --output tsv 2>/dev/null || true)
 
   if [ -z "$app_id" ]; then
-    echo "Creating new application registration..."
+    echo -e "\tCreating new application registration..."
     app_id=$(az ad app create \
       --display-name "$app_name" \
       --query appId \
@@ -95,7 +95,7 @@ webapp_auth_gh() {
     --output tsv 2>/dev/null || true)
 
   if [ -z "$assignment_exists" ]; then
-    echo "Creating role assignment..."
+    echo -e "\tCreating role assignment..."
     az role assignment create \
       --role "Website Contributor" \
       --subscription "$sub_id" \
@@ -103,15 +103,15 @@ webapp_auth_gh() {
       --assignee-principal-type ServicePrincipal \
       --scope "$scope"
   else
-    echo "Role assignment exists, skipping creation"
+    echo -e "\tRole assignment exists, skipping creation"
   fi
 
   if az ad app federated-credential show \
     --id "$app_id" \
     --federated-credential-id "github-actions-credential" >/dev/null 2>&1; then
-    echo "Federated credential already exists, skipping creation"
+    echo -e "\tFederated credential already exists, skipping creation"
   else
-    echo "Creating federated credential..."
+    echo -e "\tCreating federated credential..."
     cat<<EOF > credential.json
     {
       "name": "github-actions-credential",
@@ -223,7 +223,7 @@ EOF
   git commit -m "Added Azure webapp deploy workflow" || true
 
   # Timeout to let Website Contributor propagate
-  echo -e "\nTimeout to let OIDC role assignment propagate"
+  echo -e "\n\t60 seconds timeout to let OIDC role assignment propagate"
   sleep 60
   git push origin main
 }
@@ -242,33 +242,33 @@ webapp_set_connstring() {
       --name "$app_name" \
       --settings ConnectionStrings__DefaultConnection="@Microsoft.KeyVault(SecretUri=${db_connstring_secret})"
     
-    echo -e "\t\nWeb App Setting with Connection String Key Vault Secret was created"
+    echo -e "\tWeb App Setting with Connection String Key Vault Secret was created"
   else
-    echo -e "\t\nWeb App Setting with Connection String Key Vault secret already exists, skipping creation"
+    echo -e "\tWeb App Setting with Connection String Key Vault secret already exists, skipping creation"
   fi
 }
 
 webapp_set_ip_restrictions() {
   formatted_ip=${wan_ip//./-}
-  rule_name="AllowDeveloperClientIP_${formatted_ip}"
+  rule_name="DevIP-${formatted_ip}"
 
   echo -e "\n>>>Applying inbound IP restrictions to Web App..."
 
-  rule_exists=$(az webapp config access-restrictions show \
+  rule_exists=$(az webapp config access-restriction show \
     --resource-group "$resource_group" \
     --name "$app_name" \
-    --query "ipSecurityRestrictions[?name=='$rule_name'].name"
+    --query "ipSecurityRestrictions[?name=='$rule_name'].name" \
     --output tsv)
 
   if [ -z "$rule_exists" ]; then
     echo -e "\tAdding inbound IP restriction for developer client address ${wan_ip}"
 
-    az webapp config access-restrictions add \
+    az webapp config access-restriction add \
       --resource-group "$resource_group" \
       --name "$app_name" \
       --rule-name "$rule_name" \
       --action Allow \
-      --ip-address "${wan_ip}/32"
+      --ip-address "${wan_ip}/32" \
       --priority 100 \
       --description "Only allow access from developer public IP" >/dev/null
   else
@@ -283,7 +283,7 @@ webapp_configure_monitoring() {
     --query id \
     --output tsv)
 
-  echo "Enabling Application Insights on Web App..."
+  echo -e "\n\tEnabling Application Insights on Web App..."
   az webapp config appsettings set \
     --resource-group "$resource_group" \
     --name "$app_name" \
@@ -329,49 +329,32 @@ webapp_configure_backup() {
   echo -e "\tDaily backups configured on ${app_name}"
 }
 
-webapp_configure_storage_logs() {
-  echo -e "\nChecking Web App logging configuration..."
-
-  log_status=$(az webapp log show \
-    --resource-group "$resource_group" \
-    --name "$app_name" \
-    --query "httpLogs.azureBlobStorage.sasUrl" \
-    --output tsv 2>/dev/null || true)
-
-  if [ -z "$log_status" ];then
-    echo -e "\tConfiguring App Service to send logs to Storage Account..."
-    az webapp log config \
-      --resource-group "$resource_group" \
-      --name "$app_name" \
-      --application-logging true \
-      --level information \
-      --web-server-logging storage \
-      --storage-endpoint "https://${storage_name}.blob.core.windows.net/${container_name}" \
-      --sas-url "$backup_url" >/dev/null
-  else
-    echo -e "\tWeb server storage logging configuration already exists, skipping..."
-  fi
-}
-
 webapp_configure_storage_mount() {
   mount_id="StaticFiles"
 
   echo -e "\tChecking Web App storage mount configuration..."
-  mount_exists=$(az webapp config storage-share list \
+
+  local_storage_key=$(az storage account keys list \
+    --resource-group "$resource_group" \
+    --account-name "$storage_name" \
+    --query "[0].value" \
+    --output tsv)
+
+  echo -e "\n\tMounting File Share to Web App at /site/wwwroot/static..."
+
+  if ! az webapp config storage-account update \
     --resource-group "$resource_group" \
     --name "$app_name" \
-    --query "[?customId=='$mount_id].customId" \
-    --output tsv 2>/dev/null || true)
+    --custom-id "$mount_id" \
+    --storage-type AzureFiles \
+    --account-name "$storage_name" \
+    --share-name "$share_name" \
+    --access-key "$local_storage_key" \
+    --mount-path "/site/wwwroot/static" >/dev/null 2>&1
+  then
+    echo -e "\tMount not found, adding File Share to Web App..."
 
-  if [ -z "$mount_exists" ];then
-    local_storage_key=$(az storage account keys list \
-      --resource-group "$resource_group" \
-      --account-name "$storage_name" \
-      --query "[0].value" \
-      --output tsv)
-
-    echo -e "\tMounting File Share to Web App at /site/wwwroot/static..."
-    az webapp config storage-share add \
+    az webapp config storage-account add \
       --resource-group "$resource_group" \
       --name "$app_name" \
       --custom-id "$mount_id" \
@@ -381,6 +364,6 @@ webapp_configure_storage_mount() {
       --access-key "$local_storage_key" \
       --mount-path "/site/wwwroot/static" >/dev/null
   else
-    echo -e "\tStorage mount '${mount_id}' already exists, skipping configuration..."
+    echo -e "\tStorage mount '${mount_id} already existed and was updated."
   fi
 }

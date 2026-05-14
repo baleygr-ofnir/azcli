@@ -3,7 +3,7 @@
 storage_create() {
   storage_name=$(echo "${project_name}store" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9' | cut -c 1-24)
 
-  echo -e "\nChecking Storage Account..."
+  echo -e "\n\tChecking Storage Account..."
   if ! az storage account show \
     --resource-group "$resource_group" \
     --name "$storage_name" >/dev/null 2>&1
@@ -31,7 +31,7 @@ storage_create_container() {
     --query "[0].value" \
     --output tsv)
 
-  echo -e "\nChecking Storage Container..."
+  echo -e "\n\tChecking Storage Container..."
   if ! az storage container show \
     --account-name "$storage_name" \
     --account-key "$storage_key" \
@@ -50,7 +50,7 @@ storage_create_container() {
 storage_mount_file_share() {
   share_name="${app_name}-static-content"
 
-  echo -e "\nChecking for Azure File Share..."
+  echo -e "\n\tChecking for Azure File Share..."
   share_exists=$(az storage share show \
     --account-name "$storage_name" \
     --account-key "$storage_key" \
@@ -58,7 +58,7 @@ storage_mount_file_share() {
     --query name \
     --output tsv 2>/dev/null || true)
 
-  if [ -z "$share_exists"];then
+  if [ -z "$share_exists" ];then
     echo -e "\tCreating File Share ($share_name)..."
     az storage share create \
       --account-name "$storage_name" \

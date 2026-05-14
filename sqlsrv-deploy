@@ -7,10 +7,10 @@ sqlsrv_create() {
     --output tsv 2>/dev/null || true)
 
   if [ -z "$sqlsrv_exists" ]; then
-    read -sp "Enter SQL Server admin password: " db_password
+    read -sp "\n\tEnter SQL Server admin password: " db_password
 
     if [ -z "$db_password" ]; then
-      echo "SQL Server admin password is empty, exiting..."
+      echo -e "\tSQL Server admin password is empty, exiting..."
       exit 1
     fi
 
@@ -21,9 +21,9 @@ sqlsrv_create() {
       --admin-user "$repo_owner" \
       --admin-password "$db_password"
 
-    echo -e "\n\tSQL Server ${db_srv} was created"
+    echo -e "\tSQL Server ${db_srv} was created"
   else
-    echo "SQL Server ${db_srv} already exists, skipping creation..."
+    echo -e "\tSQL Server ${db_srv} already exists, skipping creation..."
   fi
 }
 
@@ -72,6 +72,6 @@ sqldb_create() {
 
     echo -e "\n\t SQL Database ${db_name} was created"
   else
-    echo "SQL Database already exists, skipping creation..."
+    echo -e "\tSQL Database already exists, skipping creation..."
   fi
 }

@@ -104,15 +104,18 @@ echo -e "\n>>> Configuring Web App monitoring before deployment..."
 monitoring_create_law
 monitoring_create_appinsights
 monitoring_store_secret
+
+echo -e "\n>>> Enabling monitoring on webapp..."
 webapp_configure_monitoring
 
 echo -e "\n>>> Configuring Storage and Daily Backups..."
 storage_create
 storage_create_container
 storage_mount_file_share
+
+echo -e "\n>>> Linking storage backup and mounting file share to Web App..."
 webapp_configure_storage_mount
 webapp_configure_backup
-webapp_configure_storage_logs
 
 echo -e "\n>>> Configuring GitHub Actions CI/CD for Web App..."
 webapp_deploy
