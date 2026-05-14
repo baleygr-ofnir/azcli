@@ -1,47 +1,88 @@
-# **azcli** -
-## Automated deployment of Azure App Service with SQL database and Key Vault deployment including GitHub Actions CI/CD base
+# azcli Documentation
 
-## **az-webapp-publish** <resource-group-name> <linux-runtime-string> <price-tier> -
-### Orchestrator for all the script functions:
+Automated deployment suite for Azure App Service, SQL Database, and Key Vault, featuring GitHub Actions CI/CD integration for .NET 10 applications.
 
-- Available runtimes: az webapp list-runtimes --os-type linux
+## Core Orchestrator
 
-- Price Tiers: {B1, B2, B3, D1, F1, FREE, I1MV2, I1V2, I2MV2, I2V2, I3MV2, I3V2, I4MV2, I4V2, I5MV2, I5V2, I6V2, P0V3, P0V4, P1MV3, P1MV4, P1V2, P1V3, P1V4, P2MV3, P2MV4, P2V2, P2V3, P2V4, P3MV3, P3MV4, P3V2, P3V3, P3V4, P4MV3, P4MV4, P5MV3, P5MV4, S1, S2, S3, SHARED, WS1, WS2, WS3}
+### `az-webapp-publish`
 
-- Example: az-webapp-publish Azure-RG-Name DOTNETCORE:10.0 F1
+The primary entry point that orchestrates the entire deployment sequence. It coordinates resources across web apps, SQL servers, monitoring, and storage.
 
-## **webapp-deploy** with script functions:
-### app_plan_create
-### webapp_create
-- Creates webapp that returns its Principal ID for later use
-### webapp_set_connstring
-- Configures environment variable on the web app for SQL Database Connection String with Key Vault Secret URI
-### webapp_deploy
-- Configures OIDC for GitHub Actions, a workflow and triggers it when pushing the workflow to the repository. Checks in the beginning if working directory is a configured git repository, if not makes sure it is and also attemps to create GitHub repository with GitHub CLI and push to it.
+**Usage:**
 
-## **sqlsrv-deploy** with script funtions:
-### sqlsrv_create
+```bash
+./az-webapp-publish -g <resource_group> -r <runtime> -t <price_tier>
 
-### sqldb_create
+```
 
-### sqlsrv_whitelist_appsvc_ips
+* **Parameters**:
+* `-g`: Target Azure Resource Group.
+* `-r`: Linux runtime string (e.g., `DOTNETCORE:10.0`).
+* `-t`: App Service Plan price tier (e.g., `P1V3`, `F1`).
 
 
-## **keyvault-deploy** with script functions:
-### keyvault_create
+* **Features**:
+* Determines project names based on the current working directory.
+* Retrieves the local public IP for automated whitelisting.
+* Ensures idempotent execution by checking for existing resources before creation.
 
-### keyvault_assign_admin_permissions
-- Assigns Key Vault Secrets Officer to the currently azcli signed-in user
+---
 
-### keyvault_assign_app_svc_permissions
-- Assigns Key Vault Secrets User to the web app
+## Script Modules and Functions
 
-### keyvault_set_connstring_secret
+### 1. Web App Deployment (`webapp-deploy`)
 
-Uses name of working directory for project name as it is currently designed to be run from the solution root directory. Project name is then used to create resource names.
+Handles the lifecycle of the Azure App Service and its integration with GitHub.
 
-SQL Database user is grabbed from GitHub CLI signed-in username
+* `app_plan_create`: Creates a Linux-based App Service Plan using the specified price tier.
+* `webapp_create`: Provisions the Web App with a System Assigned Managed Identity and forces HTTPS.
+* `webapp_auth_gh`: Manages OpenID Connect (OIDC) between Azure and GitHub, including application registration and role assignments.
+* `webapp_deploy`: Generates a `.github/workflows/az-workflow.yml` file for .NET 10, sets GitHub secrets, and pushes the code to trigger the initial CI/CD run.
+* `webapp_set_connstring`: Maps the SQL connection string from Key Vault to the Web App's environment variables using a Key Vault reference.
+* `webapp_set_ip_restrictions`: Configures inbound network security to only allow traffic from the developer's public IP address.
+* `webapp_configure_monitoring`: Links Application Insights to the Web App using Key Vault-backed connection strings.
+* `webapp_configure_backup`: Sets up daily backups to Azure Blob Storage (skipped for Free/F1 tiers).
+* `webapp_configure_storage_logs`: Redirects web server logs to a designated storage container.
+* `webapp_configure_storage_mount`: Mounts an Azure File Share to the Web App at `/site/wwwroot/static`.
+* `webapp_configure_autoscale`: Defines CPU-based scaling rules (Scale-out at >70%, Scale-in at <30%).
 
-All functions are configured idempotently such that it will not attempt creating any resource that already exists, in case there as issues in some part and it has to be run again.
+### 2. SQL Server Deployment (`sqlsrv-deploy`)
 
-TODO: App Insights+Log Analytics Workspace
+Manages the database infrastructure.
+
+* `sqlsrv_create`: Provisions an Azure SQL Server and prompts for an administrator password if a new server is required.
+* `sqldb_create`: Creates a SQL Database using the "Basic" service objective.
+* `sqlsrv_whitelist_appsvc_ips`: Automatically identifies and whitelists all possible outbound IP addresses of the Web App in the SQL firewall.
+
+### 3. Key Vault Management (`keyvault-deploy`)
+
+Secures application secrets and manages access policies via RBAC.
+
+* `keyvault_create`: Creates a Key Vault with Azure RBAC authorization enabled.
+* `keyvault_assign_admin_permissions`: Assigns the "Key Vault Secrets Officer" role to the currently signed-in CLI user.
+* `keyvault_assign_appsvc_permissions`: Assigns the "Key Vault Secrets User" role to the Web App's Managed Identity.
+* `keyvault_set_connstring_secret`: Formats the SQL connection string and stores it as a secure secret in the vault.
+
+### 4. Monitoring (`monitoring-deploy`)
+
+Sets up observability for the stack.
+
+* `monitoring_create_law`: Provisions a Log Analytics Workspace for centralized logging.
+* `monitoring_create_appinsights`: Creates an Application Insights component linked to the workspace.
+* `monitoring_store_secret`: Stores the Application Insights connection string in Key Vault for secure retrieval.
+
+### 5. Storage (`storage-deploy`)
+
+Handles persistent storage and backups.
+
+* `storage_create`: Provisions a General Purpose v2 Storage Account.
+* `storage_create_container`: Creates a blob container named `webapp-backups`.
+* `storage_mount_file_share`: Provisions an Azure File Share for static content.
+
+### 6. GitHub Repository Setup (`mkghrepo`)
+
+Automates local and remote repository synchronization.
+
+* Initializes a local Git repository if one does not exist.
+* Uses the GitHub CLI to create a public repository and push the local main branch.
+* Supports multiple package managers (pacman, dpkg, rpm, apk, brew) to verify GitHub CLI installation.
