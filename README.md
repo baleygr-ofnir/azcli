@@ -75,8 +75,11 @@ Manages the application environment, platform configurations, and CI/CD setup.
 
 * **`webapp_configure_storage_mount`**: Mounts an Azure File Share to `/site/wwwroot/static` to fulfill the requirement for handling static assets.
 
+
+
 ### 2. `sqlsrv-deploy` (Data Layer)
 Handles the persistent data infrastructure and network security.
+
 
 * **`sqlsrv_create`**: Provisions a logical Azure SQL Server.
 
@@ -86,6 +89,7 @@ Handles the persistent data infrastructure and network security.
 
 ### 3. `keyvault-deploy` (Identity & Secret Management)
 Implements zero-trust security via Managed Identity and RBAC.
+
 
 * **Configuration & Integration Mechanics**:
   The Key Vault integration guarantees that no sensitive connection strings or API keys are stored in application code or plain-text environment variables.
@@ -103,7 +107,20 @@ Implements zero-trust security via Managed Identity and RBAC.
 
 * **`keyvault_set_connstring_secret`**: Securely stores the database connection string as a secret in the vault.
 
-### 4. `storage-deploy` (Asset & Log Storage)
+
+
+### 4. `monitoring-deploy` (Observability)
+Configures performance tracking and logging infrastructure.
+
+* **`monitoring_create_law`**: Provisions the Log Analytics Workspace.
+
+* **`monitoring_create_appinsights`**: Provisions the Application Insights component.
+
+* **`monitoring_store_secret`**: Stores the AI connection string in Key Vault for secure consumption via Managed Identity.
+
+
+
+### 5. `storage-deploy` (Asset & Log Storage)
 Manages the resources daily system backups and static application files.
 
 * **`storage_create`**: Provisions a StorageV2 account with TLS 1.2 and disabled public blob access.
@@ -112,14 +129,7 @@ Manages the resources daily system backups and static application files.
 
 * **`storage_mount_file_share`**: Provisions the Azure File Share for application static resource hosting.
 
-### 5. `monitoring-deploy` (Observability)
-Configures performance tracking and logging infrastructure.
 
-* **`monitoring_create_law`**: Provisions the Log Analytics Workspace.
-
-* **`monitoring_create_appinsights`**: Provisions the Application Insights component.
-
-* **`monitoring_store_secret`**: Stores the AI connection string in Key Vault for secure consumption via Managed Identity.
 
 ### 6. `mkghrepo` (Repository Automation)
 Automates the local and remote repository setup.
